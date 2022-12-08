@@ -68,7 +68,8 @@ enum imageType {
 	ANSIUTF8_TYPE,
 	ANSI256UTF8_TYPE,
 	UTF8i_TYPE,
-	ANSIUTF8i_TYPE
+	ANSIUTF8i_TYPE,
+	HTML_TYPE,
 };
 
 static enum imageType image_type = PNG_TYPE;
@@ -134,8 +135,8 @@ static void usage(int help, int longopt, int status)
 "               specify the width of the margins. (default=4 (2 for Micro QR)))\n\n"
 "  -d NUMBER, --dpi=NUMBER\n"
 "               specify the DPI of the generated PNG. (default=72)\n\n"
-"  -t {PNG,PNG32,EPS,SVG,XPM,ANSI,ANSI256,ASCII,ASCIIi,UTF8,UTF8i,ANSIUTF8,ANSIUTF8i,ANSI256UTF8},\n"
-"  --type={PNG,PNG32,EPS,SVG,XPM,ANSI,ANSI256,ASCII,ASCIIi,UTF8,UTF8i,ANSIUTF8,ANSIUTF8i,ANSI256UTF8}\n"
+"  -t {PNG,PNG32,EPS,SVG,XPM,ANSI,ANSI256,ASCII,ASCIIi,UTF8,UTF8i,ANSIUTF8,ANSIUTF8i,ANSI256UTF8,HTML},\n"
+"  --type={PNG,PNG32,EPS,SVG,XPM,ANSI,ANSI256,ASCII,ASCIIi,UTF8,UTF8i,ANSIUTF8,ANSIUTF8i,ANSI256UTF8,HTML}\n"
 "               specify the type of the generated image. (default=PNG)\n\n"
 "  -S, --structured\n"
 "               make structured symbols. Version must be specified with '-v'.\n\n"
@@ -192,7 +193,7 @@ static void usage(int help, int longopt, int status)
 "  -v NUMBER    specify the minimum version of the symbol. (default=auto)\n"
 "  -m NUMBER    specify the width of the margins. (default=4 (2 for Micro))\n"
 "  -d NUMBER    specify the DPI of the generated PNG. (default=72)\n"
-"  -t {PNG,PNG32,EPS,SVG,XPM,ANSI,ANSI256,ASCII,ASCIIi,UTF8,UTF8i,ANSIUTF8,ANSIUTF8i,ANSI256UTF8}\n"
+"  -t {PNG,PNG32,EPS,SVG,XPM,ANSI,ANSI256,ASCII,ASCIIi,UTF8,UTF8i,ANSIUTF8,ANSIUTF8i,ANSI256UTF8,HTML}\n"
 "               specify the type of the generated image. (default=PNG)\n"
 "  -S           make structured symbols. Version number must be specified with '-v'.\n"
 "  -k           assume that the input text contains kanji (shift-jis).\n"
@@ -1027,6 +1028,45 @@ static QRcode *encode(const unsigned char *intext, int length)
 	return code;
 }
 
+
+static int writeHTML(const QRcode *qrcode, const char *outfile)
+{
+	FILE *fp;
+	unsigned char *row, *p;
+	int x, y;
+	int realwidth;
+
+	fp = openFile(outfile);
+
+	realwidth = (qrcode->width + margin * 2) * size;
+	/* HTML container header */
+	fprintf(fp, "<div style=\"text-align: left; padding: %dpx %dpx;\">\n"
+				"\t<div>\n", realwidth/2, realwidth/2);
+
+	/* data */
+	p = qrcode->data;
+	for(y = 0; y < qrcode->width; y++) {
+		row = (p+(y*qrcode->width));
+
+		fprintf(fp, "\t\t<div style=\"font-size: 0; line-height: 0;\">\n");
+		for(x = 0; x < qrcode->width; x++) {
+			if(*(row+x)&0x1) {
+				fprintf(fp, "\t\t\t<div style=\"display:inline-block; background-color:#000000; width:5px; height:5px\"></div>\n");
+			} else {
+				fprintf(fp, "\t\t\t<div style=\"display:inline-block; background-color:#ffffff; width:5px; height:5px\"></div>\n");
+			}
+		}
+		fprintf(fp, "\t\t</div>\n");
+	}
+	/* HTML container footer */
+	fprintf(fp, "\t</div>\n"
+				"</div>\n");
+
+	fclose(fp);
+
+	return 0;
+}
+
 static void qrencode(const unsigned char *intext, int length, const char *outfile)
 {
 	QRcode *qrcode;
@@ -1088,6 +1128,9 @@ static void qrencode(const unsigned char *intext, int length, const char *outfil
 		case ANSIUTF8i_TYPE:
 			writeUTF8(qrcode, outfile, 1, 1);
 			break;
+		case HTML_TYPE:
+			writeHTML(qrcode, outfile);
+			break;
 		default:
 			fprintf(stderr, "Unknown image type.\n");
 			exit(EXIT_FAILURE);
@@ -1130,6 +1173,9 @@ static void qrencodeStructured(const unsigned char *intext, int length, const ch
 			break;
 		case XPM_TYPE:
 			type_suffix = ".xpm";
+			break;
+		case HTML_TYPE:
+			type_suffix = ".html";
 			break;
 		case ANSI_TYPE:
 		case ANSI256_TYPE:
@@ -1227,7 +1273,9 @@ static void qrencodeStructured(const unsigned char *intext, int length, const ch
 			case ANSIUTF8i_TYPE:
 				writeUTF8(p->code, filename, 0, 1);
 				break;
-
+			case HTML_TYPE:
+				writeHTML(p->code, filename);
+				break;
 			default:
 				fprintf(stderr, "Unknown image type.\n");
 				exit(EXIT_FAILURE);
@@ -1346,6 +1394,8 @@ int main(int argc, char **argv)
 					image_type = UTF8i_TYPE;
 				} else if(strcasecmp(optarg, "ansiutf8i") == 0) {
 					image_type = ANSIUTF8i_TYPE;
+				} else if(strcasecmp(optarg, "html") == 0) {
+					image_type = HTML_TYPE;
 				} else {
 					fprintf(stderr, "Invalid image type: %s\n", optarg);
 					exit(EXIT_FAILURE);
